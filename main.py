@@ -25,7 +25,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         session_id=args.session_id,
         verbose=not args.quiet,
         orchestrate=args.orchestrate,
-        specialists=args.specialists if args.specialists else None,
+        specialists=args.specialists or None,
     )
     summary = memory.summary()
     print("\n[Ghoul] Session complete.")
@@ -107,7 +107,7 @@ def cmd_orchestrate(args: argparse.Namespace) -> None:
         session_id=args.session_id,
         verbose=not args.quiet,
         orchestrate=True,
-        specialists=args.specialists if args.specialists else None,
+        specialists=args.specialists or None,
     )
     summary = memory.summary()
     print("\n[Ghoul] Orchestrated session complete.")

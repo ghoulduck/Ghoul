@@ -17,9 +17,9 @@ class TestOrchestratorInit:
         assert names == ["debugger", "tester"]
 
 
-class TestSynthesise:
+class TestSynthesize:
     def test_empty_results(self):
-        synth = Orchestrator.synthesise([])
+        synth = Orchestrator.synthesize([])
         assert synth["avg_score"] == 0
         assert synth["all_findings"] == []
 
@@ -32,7 +32,7 @@ class TestSynthesise:
                 "summary": "Found a bug",
             }
         ]
-        synth = Orchestrator.synthesise(results)
+        synth = Orchestrator.synthesize(results)
         assert synth["avg_score"] == 80
         assert synth["all_findings"] == ["Bug A"]
         assert synth["specialist_scores"] == {"debugger": 80}
@@ -52,7 +52,7 @@ class TestSynthesise:
                 "summary": "Perf issue",
             },
         ]
-        synth = Orchestrator.synthesise(results)
+        synth = Orchestrator.synthesize(results)
         assert synth["avg_score"] == 80
         # "Bug A" appears in both but should only be listed once
         assert synth["all_findings"].count("Bug A") == 1
@@ -64,6 +64,6 @@ class TestSynthesise:
             {"specialist": "a", "findings": [], "score": 33, "summary": ""},
             {"specialist": "b", "findings": [], "score": 34, "summary": ""},
         ]
-        synth = Orchestrator.synthesise(results)
+        synth = Orchestrator.synthesize(results)
         # (33 + 34) / 2 = 33.5 → rounds to 34
         assert synth["avg_score"] == 34

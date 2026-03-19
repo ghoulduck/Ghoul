@@ -2,7 +2,7 @@
 ghoul/orchestrator.py — Specialist Orchestrator.
 
 Runs multiple specialist sub-agents against a task + code + execution result,
-collects their feedback, and synthesises a unified recommendation that the
+collects their feedback, and synthesizes a unified recommendation that the
 main agent loop can consume.
 
 Supports concurrent execution via ``concurrent.futures``.
@@ -26,7 +26,7 @@ from ghoul.specialist import (
 # ---------------------------------------------------------------------------
 
 class Orchestrator:
-    """Manages a set of specialist sub-agents and synthesises their feedback."""
+    """Manages a set of specialist sub-agents and synthesizes their feedback."""
 
     def __init__(self, specialist_names: list[str] | None = None):
         """
@@ -78,7 +78,7 @@ class Orchestrator:
         results: list[dict] = []
         for specialist in self.specialists:
             try:
-                result = specialist.analyse(task, code, execution_result)
+                result = specialist.analyze(task, code, execution_result)
                 results.append(result)
             except Exception as exc:
                 results.append(
@@ -99,7 +99,7 @@ class Orchestrator:
             max_workers=len(self.specialists)
         ) as pool:
             futures = {
-                pool.submit(s.analyse, task, code, execution_result): s
+                pool.submit(s.analyze, task, code, execution_result): s
                 for s in self.specialists
             }
             for future in concurrent.futures.as_completed(futures):
@@ -118,11 +118,11 @@ class Orchestrator:
         return results
 
     # ------------------------------------------------------------------
-    # Synthesise
+    # Synthesize
     # ------------------------------------------------------------------
 
     @staticmethod
-    def synthesise(specialist_results: list[dict]) -> dict:
+    def synthesize(specialist_results: list[dict]) -> dict:
         """
         Merge specialist results into a single unified recommendation.
 
@@ -165,7 +165,7 @@ class Orchestrator:
         }
 
     # ------------------------------------------------------------------
-    # Convenience: run + synthesise
+    # Convenience: run + synthesize
     # ------------------------------------------------------------------
 
     def orchestrate(
@@ -178,7 +178,7 @@ class Orchestrator:
         verbose: bool = False,
     ) -> dict[str, Any]:
         """
-        Run all specialists then synthesise.
+        Run all specialists then synthesize.
 
         Returns
         -------
@@ -201,7 +201,7 @@ class Orchestrator:
                     f"— {r.get('summary', '')}"
                 )
 
-        synthesis = self.synthesise(results)
+        synthesis = self.synthesize(results)
 
         if verbose:
             print(

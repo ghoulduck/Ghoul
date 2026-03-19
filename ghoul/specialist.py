@@ -5,7 +5,7 @@ Defines specialized sub-agents, each with a unique persona and system prompt
 that gives them a focused expertise (debugging, optimization, testing,
 architecture, security review).
 
-Each specialist can analyse a task + code + execution result from its own
+Each specialist can analyze a task + code + execution result from its own
 perspective and return structured feedback.
 """
 
@@ -33,14 +33,14 @@ class Specialist:
     # Optional list of focus keywords — informational only
     focus_areas: list[str] = field(default_factory=list)
 
-    def analyse(
+    def analyze(
         self,
         task: str,
         code: str,
         execution_result: dict,
     ) -> dict:
         """
-        Ask this specialist to analyse *code* in the context of *task*.
+        Ask this specialist to analyze *code* in the context of *task*.
 
         Parameters
         ----------
@@ -66,7 +66,7 @@ class Specialist:
             f"- Duration: {execution_result.get('duration')}s\n"
             f"- stdout:\n{execution_result.get('stdout', '(empty)')}\n"
             f"- stderr:\n{execution_result.get('stderr', '(empty)')}\n\n"
-            "Analyse the code from your specialist perspective and return a "
+            "Analyze the code from your specialist perspective and return a "
             "JSON object with EXACTLY these fields:\n"
             '{\n'
             '  "findings": ["<finding 1>", "<finding 2>", ...],\n'
