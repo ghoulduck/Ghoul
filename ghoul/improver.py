@@ -59,6 +59,7 @@ def write_module(module_name: str, code: str) -> None:
 def improve_module(
     module_name: str,
     instructions: str | None = None,
+    specialist_insights: list[str] | None = None,
     memory: Memory | None = None,
     verbose: bool = True,
 ) -> str:
@@ -67,10 +68,11 @@ def improve_module(
 
     Parameters
     ----------
-    module_name:   Name of the module to improve (without .py).
-    instructions:  Optional specific improvement instructions.
-    memory:        Optional Memory instance to record the improvement.
-    verbose:       Print progress to stdout.
+    module_name:          Name of the module to improve (without .py).
+    instructions:         Optional specific improvement instructions.
+    specialist_insights:  Optional list of findings from specialist sub-agents.
+    memory:               Optional Memory instance to record the improvement.
+    verbose:              Print progress to stdout.
 
     Returns
     -------
@@ -88,6 +90,10 @@ def improve_module(
     ]
     if instructions:
         prompt_parts.append(f"\nSpecific improvement instructions:\n{instructions}")
+    if specialist_insights:
+        prompt_parts.append("\nFindings from specialist sub-agents:")
+        for insight in specialist_insights:
+            prompt_parts.append(f"  • {insight}")
     prompt_parts.append(
         "\nPlease improve this code. Return ONLY the improved Python source code."
     )
@@ -124,6 +130,7 @@ def improve_module(
 def improve_all(
     modules: list[str] | None = None,
     instructions: str | None = None,
+    specialist_insights: list[str] | None = None,
     memory: Memory | None = None,
     verbose: bool = True,
 ) -> dict[str, str]:
@@ -132,10 +139,14 @@ def improve_all(
 
     Parameters
     ----------
-    modules: List of module names to improve. Defaults to all core modules.
-    instructions: Optional improvement instructions applied to each module.
-    memory:  Optional Memory instance.
-    verbose: Print progress.
+    modules:              List of module names to improve. Defaults to all
+                          core modules.
+    instructions:         Optional improvement instructions applied to each
+                          module.
+    specialist_insights:  Optional list of specialist findings applied to each
+                          module.
+    memory:               Optional Memory instance.
+    verbose:              Print progress.
 
     Returns
     -------
@@ -151,6 +162,8 @@ def improve_all(
             "memory",
             "improver",
             "config",
+            "specialist",
+            "orchestrator",
         ]
 
     results: dict[str, str] = {}
@@ -159,6 +172,7 @@ def improve_all(
             results[module] = improve_module(
                 module,
                 instructions=instructions,
+                specialist_insights=specialist_insights,
                 memory=memory,
                 verbose=verbose,
             )

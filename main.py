@@ -7,6 +7,7 @@ Subcommands:
   improve [module ...]  — Have the agent improve its own code.
   collect <topic>       — Collect training data on a topic.
   fine-tune <data_path> — Run the fine-tuning pipeline.
+  orchestrate <task>    — Run the agent with specialist sub-agent orchestration.
   status                — Show agent history and metrics.
 """
 
@@ -19,7 +20,13 @@ def cmd_run(args: argparse.Namespace) -> None:
     from ghoul.agent import run
 
     task = " ".join(args.task)
-    memory = run(task=task, session_id=args.session_id, verbose=not args.quiet)
+    memory = run(
+        task=task,
+        session_id=args.session_id,
+        verbose=not args.quiet,
+        orchestrate=args.orchestrate,
+        specialists=args.specialists if args.specialists else None,
+    )
     summary = memory.summary()
     print("\n[Ghoul] Session complete.")
     print(json.dumps(summary, indent=2, default=str))
@@ -90,6 +97,23 @@ def cmd_status(args: argparse.Namespace) -> None:
         print()
 
 
+def cmd_orchestrate(args: argparse.Namespace) -> None:
+    """Run a task with specialist sub-agent orchestration."""
+    from ghoul.agent import run
+
+    task = " ".join(args.task)
+    memory = run(
+        task=task,
+        session_id=args.session_id,
+        verbose=not args.quiet,
+        orchestrate=True,
+        specialists=args.specialists if args.specialists else None,
+    )
+    summary = memory.summary()
+    print("\n[Ghoul] Orchestrated session complete.")
+    print(json.dumps(summary, indent=2, default=str))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ghoul",
@@ -107,6 +131,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_run = sub.add_parser("run", help="Run the agent on a task.")
     p_run.add_argument("task", nargs="+", help="The task/goal for the agent.")
     p_run.add_argument("--quiet", action="store_true", help="Suppress verbose output.")
+    p_run.add_argument(
+        "--orchestrate",
+        action="store_true",
+        help="Enable specialist sub-agent orchestration during the run.",
+    )
+    p_run.add_argument(
+        "--specialists",
+        nargs="*",
+        default=[],
+        help="Specialist names to use (e.g. debugger optimizer). "
+        "Defaults to all if omitted.",
+    )
 
     # improve
     p_improve = sub.add_parser(
@@ -151,6 +187,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_ft.add_argument("--model", default=None, help="Base model name override.")
 
+    # orchestrate
+    p_orch = sub.add_parser(
+        "orchestrate",
+        help="Run the agent on a task with specialist sub-agent orchestration.",
+    )
+    p_orch.add_argument("task", nargs="+", help="The task/goal for the agent.")
+    p_orch.add_argument(
+        "--quiet", action="store_true", help="Suppress verbose output."
+    )
+    p_orch.add_argument(
+        "--specialists",
+        nargs="*",
+        default=[],
+        help="Specialist names to use (e.g. debugger optimizer). "
+        "Defaults to all if omitted.",
+    )
+
     # status
     sub.add_parser("status", help="Show agent history and metrics.")
 
@@ -166,6 +219,7 @@ def main() -> None:
         "improve": cmd_improve,
         "collect": cmd_collect,
         "fine-tune": cmd_finetune,
+        "orchestrate": cmd_orchestrate,
         "status": cmd_status,
     }
 

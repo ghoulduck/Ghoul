@@ -25,12 +25,14 @@ limits, no sandboxing.
 | Agent Core | `ghoul/agent.py` | Infinite agentic loop — generate → execute → evaluate → improve → repeat |
 | Code Executor | `ghoul/executor.py` | Runs generated Python code directly via subprocess, no sandboxing |
 | Self-Evaluator | `ghoul/evaluator.py` | Claude scores outputs (0–100) and decides if the task is complete |
+| **Specialists** | `ghoul/specialist.py` | **Specialist sub-agent personas — debugger, optimizer, tester, architect, security reviewer** |
+| **Orchestrator** | `ghoul/orchestrator.py` | **Runs specialists in parallel, synthesises unified feedback for the agent loop** |
 | Data Collector | `ghoul/data_collector.py` | Web scraping, GitHub API search, and Claude synthetic data generation |
 | Fine-Tuner | `ghoul/fine_tuner.py` | Formats data for Anthropic / HuggingFace and triggers fine-tuning jobs |
 | Memory | `ghoul/memory.py` | Full state persistence — history, metrics, improvement tracking |
 | Self-Improver | `ghoul/improver.py` | Reads and rewrites Ghoul's own source code via Claude |
 | Config | `ghoul/config.py` | Loads from environment variables and/or `config.yaml` |
-| CLI | `main.py` | `run`, `improve`, `collect`, `fine-tune`, `status` subcommands |
+| CLI | `main.py` | `run`, `improve`, `collect`, `fine-tune`, `orchestrate`, `status` subcommands |
 | **Java Frontend** | `frontend/GhoulUI.java` | Java Swing desktop GUI for all commands |
 
 ---
@@ -69,7 +71,33 @@ until Claude determines the task is complete. No iteration limit.
 ```bash
 # Resume a previous session
 python main.py --session-id session_1700000000 run "Improve the error handling"
+
+# Enable specialist sub-agent orchestration during a run
+python main.py run --orchestrate "Build a REST API"
+
+# Use only specific specialists
+python main.py run --orchestrate --specialists debugger optimizer "Fix performance issues"
 ```
+
+### `orchestrate` — Run with specialist sub-agents
+
+```bash
+python main.py orchestrate "Write a secure file upload handler"
+```
+
+Shorthand for `run --orchestrate`. After each iteration the orchestrator
+runs specialist sub-agents (debugger, optimizer, tester, architect, security
+reviewer) that analyse the code from their unique perspectives. Their
+combined feedback is fed back into the next iteration alongside the
+evaluator's assessment.
+
+```bash
+# Pick specific specialists
+python main.py orchestrate --specialists debugger security_reviewer "Sanitise user input"
+```
+
+Available specialists: `debugger`, `optimizer`, `tester`, `architect`,
+`security_reviewer`.
 
 ### `improve` — Have the agent improve its own code
 
@@ -188,7 +216,9 @@ Ghoul/
 │   ├── executor.py       # Subprocess code execution
 │   ├── fine_tuner.py     # Fine-tuning pipeline
 │   ├── improver.py       # Self-code improvement
-│   └── memory.py         # State persistence
+│   ├── memory.py         # State persistence
+│   ├── orchestrator.py   # Specialist sub-agent orchestrator
+│   └── specialist.py     # Specialist agent personas
 ├── frontend/
 │   ├── GhoulUI.java      # Java Swing desktop GUI
 │   └── run.sh            # Compile-and-run helper script

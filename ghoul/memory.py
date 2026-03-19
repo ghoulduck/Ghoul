@@ -102,6 +102,23 @@ class Memory:
         self._state.setdefault("data_collections", []).append(record)
         self._save(self._history_file, self._state)
 
+    def record_orchestration(self, orchestration_result: dict) -> None:
+        """Record an orchestration event (specialist sub-agent run)."""
+        synthesis = orchestration_result.get("synthesis", {})
+        specialist_names = [
+            r.get("specialist", "unknown")
+            for r in orchestration_result.get("specialist_results", [])
+        ]
+        record = {
+            "timestamp": time.time(),
+            "specialists": specialist_names,
+            "avg_score": synthesis.get("avg_score", 0),
+            "finding_count": len(synthesis.get("all_findings", [])),
+            "summary": synthesis.get("summary", ""),
+        }
+        self._state.setdefault("orchestrations", []).append(record)
+        self._save(self._history_file, self._state)
+
     def get_iterations(self) -> list:
         return self._state.get("iterations", [])
 
@@ -129,6 +146,7 @@ class Memory:
             "improvement_rate": m["improvement_rate"],
             "improvements": len(self._state.get("improvements", [])),
             "data_collections": len(self._state.get("data_collections", [])),
+            "orchestrations": len(self._state.get("orchestrations", [])),
             "history_file": str(self._history_file),
             "first_task": iters[0]["task"] if iters else None,
         }
