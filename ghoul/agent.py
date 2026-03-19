@@ -18,6 +18,7 @@ for additional improvement at configurable intervals.
 
 import anthropic
 
+from ghoul import strip_markdown_fences
 from ghoul.config import CFG
 from ghoul.evaluator import evaluate
 from ghoul.executor import execute_code
@@ -34,13 +35,7 @@ The code must be complete and executable as-is.
 
 def _extract_code(text: str) -> str:
     """Strip optional markdown code fences from Claude's response."""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        # Drop first line (```python or ```) and last line (```)
-        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-        return "\n".join(inner)
-    return text
+    return strip_markdown_fences(text)
 
 
 def run(

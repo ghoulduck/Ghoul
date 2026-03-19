@@ -14,6 +14,7 @@ from pathlib import Path
 
 import anthropic
 
+from ghoul import strip_markdown_fences
 from ghoul.config import CFG
 from ghoul.memory import Memory
 
@@ -103,9 +104,6 @@ def improve_module(
             if verbose:
                 print(f"[Improver] Backup failed (continuing): {exc}")
 
-    if verbose:
-        print(f"[Improver] Reading {module_name}.py ({len(old_code)} chars)…")
-
     prompt_parts = [
         f"Here is the source code of the `{module_name}` module:\n\n```python\n{old_code}\n```",
     ]
@@ -122,13 +120,7 @@ def improve_module(
         messages=[{"role": "user", "content": "\n".join(prompt_parts)}],
     )
 
-    new_code = message.content[0].text.strip()
-
-    # Strip accidental markdown fences
-    if new_code.startswith("```"):
-        lines = new_code.splitlines()
-        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-        new_code = "\n".join(inner)
+    new_code = strip_markdown_fences(message.content[0].text)
 
     if verbose:
         print(f"[Improver] Received improved code ({len(new_code)} chars).")

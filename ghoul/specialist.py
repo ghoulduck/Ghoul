@@ -9,6 +9,7 @@ sends a task through a specialist persona and returns the response.
 
 import anthropic
 
+from ghoul import strip_markdown_fences
 from ghoul.config import CFG
 
 
@@ -125,12 +126,6 @@ def run_specialist(
         messages=[{"role": "user", "content": "\n\n".join(prompt_parts)}],
     )
 
-    response_text = message.content[0].text.strip()
-
-    # Strip accidental markdown fences
-    if response_text.startswith("```"):
-        lines = response_text.splitlines()
-        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-        response_text = "\n".join(inner)
+    response_text = strip_markdown_fences(message.content[0].text)
 
     return response_text

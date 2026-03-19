@@ -114,6 +114,69 @@ def scrape_url(url: str) -> list[dict]:
     return samples
 
 
+def _extract_page_content(url: str, soup: BeautifulSoup) -> list[dict]:
+    """
+    Extract all content from an already-parsed BeautifulSoup object.
+
+    Same extraction logic as :func:`scrape_url` but without making an HTTP
+    request — used by :func:`scrape_deep` which has already fetched the page.
+    """
+    samples: list[dict] = []
+    ts = time.time()
+
+    # 1. Code blocks (highest value)
+    for tag in soup.find_all(["code", "pre", "samp", "kbd"]):
+        text = tag.get_text(strip=True)
+        if len(text) > 20:
+            samples.append({
+                "source": "web_scrape_code",
+                "url": url,
+                "tag": tag.name,
+                "content": text,
+                "scraped_at": ts,
+            })
+
+    # 2. Documentation text — paragraphs, headings, list items, blockquotes
+    for tag in soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6",
+                              "li", "dt", "dd", "blockquote", "figcaption"]):
+        text = tag.get_text(strip=True)
+        if len(text) > 30:
+            samples.append({
+                "source": "web_scrape_text",
+                "url": url,
+                "tag": tag.name,
+                "content": text,
+                "scraped_at": ts,
+            })
+
+    # 3. Tables (row-by-row)
+    for table in soup.find_all("table"):
+        for row in table.find_all("tr"):
+            cells = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
+            row_text = " | ".join(cells)
+            if len(row_text) > 20:
+                samples.append({
+                    "source": "web_scrape_table",
+                    "url": url,
+                    "tag": "tr",
+                    "content": row_text,
+                    "scraped_at": ts,
+                })
+
+    # 4. Full-page text as a single document
+    full_text = soup.get_text(separator="\n", strip=True)
+    if len(full_text) > 200:
+        samples.append({
+            "source": "web_scrape_full",
+            "url": url,
+            "tag": "body",
+            "content": full_text,
+            "scraped_at": ts,
+        })
+
+    return samples
+
+
 def _discover_links(url: str, soup: BeautifulSoup, max_links: int = 50) -> list[str]:
     """
     Discover same-domain and documentation-like links on a page.
@@ -179,12 +242,12 @@ def scrape_deep(
 
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # Scrape this page
+        # Extract content from the already-fetched page
         try:
-            samples = scrape_url(url)
+            samples = _extract_page_content(url, soup)
             all_samples.extend(samples)
         except Exception as exc:
-            print(f"[DataCollector] Failed to scrape {url}: {exc}")
+            print(f"[DataCollector] Failed to extract content from {url}: {exc}")
 
         # Discover and queue links for deeper crawling
         if depth < max_depth:
@@ -299,7 +362,8 @@ def _scrape_single_repo(
             continue
 
         path = item.get("path", "")
-        ext = "." + path.rsplit(".", 1)[-1] if "." in path else ""
+        parts = path.rsplit(".", 1)
+        ext = ("." + parts[1]) if len(parts) == 2 else ""
 
         if ext.lower() not in _ALL_EXTENSIONS:
             continue

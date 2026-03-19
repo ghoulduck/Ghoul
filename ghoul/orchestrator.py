@@ -11,6 +11,7 @@ import concurrent.futures
 
 import anthropic
 
+from ghoul import strip_markdown_fences
 from ghoul.config import CFG
 from ghoul.memory import Memory
 from ghoul.specialist import SPECIALISTS, run_specialist
@@ -128,13 +129,7 @@ def synthesise(original_code: str, specialist_results: dict[str, str]) -> str:
         messages=[{"role": "user", "content": "\n\n".join(prompt_parts)}],
     )
 
-    text = message.content[0].text.strip()
-
-    # Strip accidental markdown fences
-    if text.startswith("```"):
-        lines = text.splitlines()
-        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-        text = "\n".join(inner)
+    text = strip_markdown_fences(message.content[0].text)
 
     return text
 
