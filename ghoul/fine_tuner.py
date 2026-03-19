@@ -111,25 +111,31 @@ def start_anthropic_finetune(
     file_id = uploaded.id
     print(f"[FineTuner] Uploaded training file: {file_id}")
 
-    # Create fine-tuning job
-    job = client.beta.messages.batches.create(
-        requests=[
-            {
-                "custom_id": f"ghoul-ft-{suffix}",
-                "params": {
-                    "model": base_model,
-                    "max_tokens": 1,
-                    "messages": [{"role": "user", "content": "ping"}],
-                },
-            }
-        ]
-    )
+    # Create fine-tuning job via the Anthropic fine-tuning API
+    try:
+        job = client.fine_tuning.jobs.create(
+            model=base_model,
+            training_file=file_id,
+            suffix=suffix,
+        )
+        job_id = job.id
+        job_status = getattr(job, "status", "submitted")
+    except Exception as exc:
+        # Fine-tuning may require specific API access; surface the error clearly
+        return {
+            "type": "anthropic",
+            "file_id": file_id,
+            "job_id": None,
+            "status": "error",
+            "error": str(exc),
+            "started_at": time.time(),
+        }
 
     return {
         "type": "anthropic",
         "file_id": file_id,
-        "job_id": getattr(job, "id", str(job)),
-        "status": "submitted",
+        "job_id": job_id,
+        "status": job_status,
         "started_at": time.time(),
     }
 
@@ -201,14 +207,14 @@ def start_hf_finetune(
 # ---------------------------------------------------------------------------
 
 def get_anthropic_job_status(job_id: str) -> dict:
-    """Poll the status of an Anthropic fine-tuning / batch job."""
+    """Poll the status of an Anthropic fine-tuning job."""
     client = anthropic.Anthropic(api_key=CFG["anthropic_api_key"])
     try:
-        batch = client.beta.messages.batches.retrieve(job_id)
+        job = client.fine_tuning.jobs.retrieve(job_id)
         return {
             "job_id": job_id,
-            "status": getattr(batch, "processing_status", "unknown"),
-            "details": str(batch),
+            "status": getattr(job, "status", "unknown"),
+            "details": str(job),
         }
     except Exception as exc:
         return {"job_id": job_id, "status": "error", "error": str(exc)}

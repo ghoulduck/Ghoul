@@ -76,7 +76,7 @@ class Memory:
         self._metrics["iteration_count"] += 1
         scores = self._metrics["scores"]
         if len(scores) >= 2:
-            self._metrics["improvement_rate"] = (scores[-1] - scores[0]) / len(scores)
+            self._metrics["improvement_rate"] = (scores[-1] - scores[0]) / (len(scores) - 1)
         self._save(self._metrics_file, self._metrics)
 
     def record_improvement(self, module: str, old_code: str, new_code: str) -> None:

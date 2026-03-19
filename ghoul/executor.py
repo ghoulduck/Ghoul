@@ -7,6 +7,7 @@ No sandboxing, no restrictions.
 """
 
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -43,7 +44,7 @@ def execute_file(path: str | Path, cleanup: bool = False) -> dict:
     start = time.monotonic()
     try:
         proc = subprocess.run(
-            ["python", path],
+            [sys.executable, path],
             capture_output=True,
             text=True,
         )
