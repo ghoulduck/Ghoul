@@ -87,6 +87,10 @@ def cmd_collect(args: argparse.Namespace) -> None:
         urls=urls,
         github_query=args.github_query,
         synthetic_count=args.synthetic_count,
+        max_repos=args.max_repos,
+        max_files_per_repo=args.max_files_per_repo,
+        crawl_depth=args.crawl_depth,
+        crawl_max_pages=args.crawl_max_pages,
         memory=memory,
     )
     print(f"\n[Ghoul] Training data saved to: {out_path}")
@@ -188,7 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect = sub.add_parser("collect", help="Collect training data on a topic.")
     p_collect.add_argument("topic", help="Topic to collect data on.")
     p_collect.add_argument(
-        "--urls", nargs="*", default=[], help="URLs to scrape."
+        "--urls", nargs="*", default=[], help="Seed URLs to deep-crawl."
     )
     p_collect.add_argument(
         "--github-query", default=None, help="GitHub search query override."
@@ -196,8 +200,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument(
         "--synthetic-count",
         type=int,
-        default=10,
-        help="Number of synthetic examples to generate (default: 10).",
+        default=20,
+        help="Number of synthetic examples to generate (default: 20).",
+    )
+    p_collect.add_argument(
+        "--max-repos",
+        type=int,
+        default=100,
+        help="Maximum GitHub repos to scrape (default: 100).",
+    )
+    p_collect.add_argument(
+        "--max-files-per-repo",
+        type=int,
+        default=200,
+        help="Maximum files to download per repo (default: 200).",
+    )
+    p_collect.add_argument(
+        "--crawl-depth",
+        type=int,
+        default=2,
+        help="Link-following depth for web scraping (default: 2).",
+    )
+    p_collect.add_argument(
+        "--crawl-max-pages",
+        type=int,
+        default=100,
+        help="Maximum pages to visit per crawl (default: 100).",
     )
 
     # fine-tune
