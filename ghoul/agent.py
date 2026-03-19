@@ -11,6 +11,9 @@ The main agentic loop:
      or the user interrupts.
 
 No iteration limits. Maintains full conversation history.
+
+Optionally integrates with the orchestrator to run specialist personas
+for additional improvement at configurable intervals.
 """
 
 import anthropic
@@ -40,15 +43,24 @@ def _extract_code(text: str) -> str:
     return text
 
 
-def run(task: str, session_id: str | None = None, verbose: bool = True) -> Memory:
+def run(
+    task: str,
+    session_id: str | None = None,
+    verbose: bool = True,
+    use_orchestrator: bool = False,
+    orchestrate_interval: int = 3,
+) -> Memory:
     """
     Run the agent loop on *task*.
 
     Parameters
     ----------
-    task:       Natural language description of what to accomplish.
-    session_id: Optional ID to resume a previous session.
-    verbose:    Print progress to stdout.
+    task:                  Natural language description of what to accomplish.
+    session_id:            Optional ID to resume a previous session.
+    verbose:               Print progress to stdout.
+    use_orchestrator:      If True, run specialist personas via the orchestrator
+                           every *orchestrate_interval* iterations to refine code.
+    orchestrate_interval:  How often (in iterations) to invoke the orchestrator.
 
     Returns
     -------
@@ -116,6 +128,24 @@ def run(task: str, session_id: str | None = None, verbose: bool = True) -> Memor
                 print("  Improvements needed:")
                 for imp in evaluation["improvements"]:
                     print(f"    - {imp}")
+
+        # --- Orchestrator pass (optional) ---
+        if use_orchestrator and iteration % orchestrate_interval == 0:
+            try:
+                from ghoul.orchestrator import orchestrate
+
+                if verbose:
+                    print(f"[Ghoul] Running orchestrator pass…")
+                code = orchestrate(
+                    code=code,
+                    task=task,
+                    verbose=verbose,
+                )
+                if verbose:
+                    print(f"[Ghoul] Orchestrator refined code ({len(code)} chars)")
+            except Exception as exc:
+                if verbose:
+                    print(f"[Ghoul] Orchestrator pass failed: {exc}")
 
         # --- Persist ---
         memory.record_iteration(code, result, evaluation, task)

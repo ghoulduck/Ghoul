@@ -797,7 +797,7 @@ public class GhoulUI extends JFrame {
      */
     private String getFieldValue(JTextField field, String placeholder) {
         String text = field.getText().trim();
-        if (text.equals(placeholder)) return "";
+        if (text.equals(placeholder) && field.getForeground().equals(FG_DIM)) return "";
         return text;
     }
 

@@ -1,0 +1,87 @@
+/*
+ * build.gradle — Gradle Shadow JAR + jpackage native installer for Ghoul Java frontend.
+ *
+ * Prerequisites:
+ *   - JDK 14+ (jpackage support)
+ *   - Gradle 7+ (or use the Gradle wrapper)
+ *
+ * Tasks:
+ *   gradle shadowJar       — Build a fat JAR (GhoulUI + deps) in build/libs/
+ *   gradle jpackageImage   — Build a native installer (requires jpackage)
+ *   gradle build           — Compile, test, and package
+ *
+ * Usage:
+ *   cd <project-root>
+ *   gradle shadowJar
+ *   java -jar build/libs/ghoul-ui-all.jar
+ */
+
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'com.ghoul'
+version = '0.1.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+application {
+    mainClass = 'GhoulUI'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['frontend']
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // No external Java dependencies — GhoulUI uses only the JDK stdlib (Swing)
+}
+
+shadowJar {
+    archiveBaseName.set('ghoul-ui')
+    archiveClassifier.set('all')
+    archiveVersion.set(version)
+    manifest {
+        attributes 'Main-Class': application.mainClass
+    }
+}
+
+// ---------------------------------------------------------------------------
+// jpackage — build a native installer (requires JDK 14+)
+// ---------------------------------------------------------------------------
+task jpackageImage(type: Exec, dependsOn: shadowJar) {
+    description = 'Build a native application image using jpackage.'
+    group = 'distribution'
+
+    def inputJar = shadowJar.archiveFile.get().asFile
+    def outputDir = file("${buildDir}/jpackage")
+
+    doFirst {
+        outputDir.mkdirs()
+    }
+
+    commandLine(
+        'jpackage',
+        '--input', inputJar.parentFile.absolutePath,
+        '--main-jar', inputJar.name,
+        '--main-class', application.mainClass.get(),
+        '--name', 'Ghoul',
+        '--app-version', version,
+        '--dest', outputDir.absolutePath,
+        '--type', 'app-image',
+        '--java-options', '-Xmx512m',
+    )
+}

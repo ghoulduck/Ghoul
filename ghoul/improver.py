@@ -5,6 +5,9 @@ The agent reads its own source code, sends it to Claude, receives an
 improved version, and writes it back to disk — replacing its own files.
 
 No restrictions on what it can modify.
+
+Supports auto-backup before writes and optional specialist insights via
+the orchestrator.
 """
 
 from pathlib import Path
@@ -61,16 +64,21 @@ def improve_module(
     instructions: str | None = None,
     memory: Memory | None = None,
     verbose: bool = True,
+    use_specialists: bool = False,
+    auto_backup: bool = True,
 ) -> str:
     """
     Ask Claude to improve a Ghoul module and write the result back to disk.
 
     Parameters
     ----------
-    module_name:   Name of the module to improve (without .py).
-    instructions:  Optional specific improvement instructions.
-    memory:        Optional Memory instance to record the improvement.
-    verbose:       Print progress to stdout.
+    module_name:     Name of the module to improve (without .py).
+    instructions:    Optional specific improvement instructions.
+    memory:          Optional Memory instance to record the improvement.
+    verbose:         Print progress to stdout.
+    use_specialists: If True, also run specialist personas via the
+                     orchestrator and merge insights.
+    auto_backup:     If True, create a backup before writing changes.
 
     Returns
     -------
@@ -79,6 +87,21 @@ def improve_module(
     client = anthropic.Anthropic(api_key=CFG["anthropic_api_key"])
 
     old_code = read_module(module_name)
+
+    if verbose:
+        print(f"[Improver] Reading {module_name}.py ({len(old_code)} chars)…")
+
+    # Auto-backup before modification
+    if auto_backup:
+        try:
+            from ghoul.backup import create_backup
+
+            backup_path = create_backup(label=f"pre_improve_{module_name}")
+            if verbose:
+                print(f"[Improver] Backup created: {backup_path}")
+        except Exception as exc:
+            if verbose:
+                print(f"[Improver] Backup failed (continuing): {exc}")
 
     if verbose:
         print(f"[Improver] Reading {module_name}.py ({len(old_code)} chars)…")
@@ -115,6 +138,26 @@ def improve_module(
     if verbose:
         print(f"[Improver] Wrote improved {module_name}.py to disk ✓")
 
+    # Optional: run specialist insights and merge
+    if use_specialists:
+        try:
+            from ghoul.orchestrator import orchestrate
+
+            if verbose:
+                print(f"[Improver] Running specialist personas for additional insights…")
+            specialist_code = orchestrate(
+                code=new_code,
+                task=f"Further improve the {module_name} module",
+                verbose=verbose,
+            )
+            write_module(module_name, specialist_code)
+            new_code = specialist_code
+            if verbose:
+                print(f"[Improver] Specialist insights applied to {module_name}.py ✓")
+        except Exception as exc:
+            if verbose:
+                print(f"[Improver] Specialist pass failed (keeping base improvement): {exc}")
+
     if memory:
         memory.record_improvement(module_name, old_code, new_code)
 
@@ -126,16 +169,18 @@ def improve_all(
     instructions: str | None = None,
     memory: Memory | None = None,
     verbose: bool = True,
+    use_specialists: bool = False,
 ) -> dict[str, str]:
     """
     Improve multiple Ghoul modules.
 
     Parameters
     ----------
-    modules: List of module names to improve. Defaults to all core modules.
-    instructions: Optional improvement instructions applied to each module.
-    memory:  Optional Memory instance.
-    verbose: Print progress.
+    modules:         List of module names to improve. Defaults to all core modules.
+    instructions:    Optional improvement instructions applied to each module.
+    memory:          Optional Memory instance.
+    verbose:         Print progress.
+    use_specialists: Also run specialist personas for additional insights.
 
     Returns
     -------
@@ -161,6 +206,7 @@ def improve_all(
                 instructions=instructions,
                 memory=memory,
                 verbose=verbose,
+                use_specialists=use_specialists,
             )
         except Exception as exc:
             print(f"[Improver] Failed to improve {module}: {exc}")

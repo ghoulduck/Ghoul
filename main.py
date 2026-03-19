@@ -5,6 +5,7 @@ main.py — Ghoul CLI entry point.
 Subcommands:
   run <task>            — Run the agent on a task.
   improve [module ...]  — Have the agent improve its own code.
+  orchestrate [module]  — Orchestrate specialist personas to improve code.
   collect <topic>       — Collect training data on a topic.
   fine-tune <data_path> — Run the fine-tuning pipeline.
   status                — Show agent history and metrics.
@@ -38,9 +39,41 @@ def cmd_improve(args: argparse.Namespace) -> None:
                 instructions=args.instructions,
                 memory=memory,
                 verbose=True,
+                use_specialists=args.specialists,
             )
     else:
-        improve_all(instructions=args.instructions, memory=memory, verbose=True)
+        improve_all(
+            instructions=args.instructions,
+            memory=memory,
+            verbose=True,
+            use_specialists=args.specialists,
+        )
+
+
+def cmd_orchestrate(args: argparse.Namespace) -> None:
+    from ghoul.memory import Memory
+    from ghoul.orchestrator import orchestrate_module
+
+    memory = Memory(session_id=args.session_id)
+
+    modules = args.modules or [
+        "agent", "executor", "evaluator", "data_collector",
+        "fine_tuner", "memory", "improver", "config",
+    ]
+
+    specialist_ids = args.specialists.split(",") if args.specialists else None
+
+    for module in modules:
+        try:
+            orchestrate_module(
+                module,
+                specialist_ids=specialist_ids,
+                extra_instructions=args.instructions,
+                memory=memory,
+                verbose=True,
+            )
+        except Exception as exc:
+            print(f"[Orchestrator] Failed on {module}: {exc}")
 
 
 def cmd_collect(args: argparse.Namespace) -> None:
@@ -123,6 +156,33 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Specific improvement instructions to pass to Claude.",
     )
+    p_improve.add_argument(
+        "--specialists",
+        action="store_true",
+        default=False,
+        help="Also run specialist personas for additional insights.",
+    )
+
+    # orchestrate
+    p_orch = sub.add_parser(
+        "orchestrate",
+        help="Orchestrate specialist personas to improve Ghoul modules.",
+    )
+    p_orch.add_argument(
+        "modules",
+        nargs="*",
+        help="Module names to orchestrate (default: all modules).",
+    )
+    p_orch.add_argument(
+        "--specialists",
+        default=None,
+        help="Comma-separated specialist IDs to use (default: all).",
+    )
+    p_orch.add_argument(
+        "--instructions",
+        default=None,
+        help="Extra instructions for every specialist.",
+    )
 
     # collect
     p_collect = sub.add_parser("collect", help="Collect training data on a topic.")
@@ -164,6 +224,7 @@ def main() -> None:
     dispatch = {
         "run": cmd_run,
         "improve": cmd_improve,
+        "orchestrate": cmd_orchestrate,
         "collect": cmd_collect,
         "fine-tune": cmd_finetune,
         "status": cmd_status,
