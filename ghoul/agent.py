@@ -11,10 +11,14 @@ The main agentic loop:
      or the user interrupts.
 
 No iteration limits. Maintains full conversation history.
+
+Optionally integrates with the orchestrator to run specialist personas
+for additional improvement at configurable intervals.
 """
 
 import anthropic
 
+from ghoul import strip_markdown_fences
 from ghoul.config import CFG
 from ghoul.evaluator import evaluate
 from ghoul.executor import execute_code
@@ -31,24 +35,27 @@ The code must be complete and executable as-is.
 
 def _extract_code(text: str) -> str:
     """Strip optional markdown code fences from Claude's response."""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        # Drop first line (```python or ```) and last line (```)
-        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-        return "\n".join(inner)
-    return text
+    return strip_markdown_fences(text)
 
 
-def run(task: str, session_id: str | None = None, verbose: bool = True) -> Memory:
+def run(
+    task: str,
+    session_id: str | None = None,
+    verbose: bool = True,
+    use_orchestrator: bool = False,
+    orchestrate_interval: int = 3,
+) -> Memory:
     """
     Run the agent loop on *task*.
 
     Parameters
     ----------
-    task:       Natural language description of what to accomplish.
-    session_id: Optional ID to resume a previous session.
-    verbose:    Print progress to stdout.
+    task:                  Natural language description of what to accomplish.
+    session_id:            Optional ID to resume a previous session.
+    verbose:               Print progress to stdout.
+    use_orchestrator:      If True, run specialist personas via the orchestrator
+                           every *orchestrate_interval* iterations to refine code.
+    orchestrate_interval:  How often (in iterations) to invoke the orchestrator.
 
     Returns
     -------
@@ -116,6 +123,24 @@ def run(task: str, session_id: str | None = None, verbose: bool = True) -> Memor
                 print("  Improvements needed:")
                 for imp in evaluation["improvements"]:
                     print(f"    - {imp}")
+
+        # --- Orchestrator pass (optional) ---
+        if use_orchestrator and iteration % orchestrate_interval == 0:
+            try:
+                from ghoul.orchestrator import orchestrate
+
+                if verbose:
+                    print(f"[Ghoul] Running orchestrator pass…")
+                code = orchestrate(
+                    code=code,
+                    task=task,
+                    verbose=verbose,
+                )
+                if verbose:
+                    print(f"[Ghoul] Orchestrator refined code ({len(code)} chars)")
+            except Exception as exc:
+                if verbose:
+                    print(f"[Ghoul] Orchestrator pass failed: {exc}")
 
         # --- Persist ---
         memory.record_iteration(code, result, evaluation, task)

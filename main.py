@@ -5,6 +5,7 @@ main.py — Ghoul CLI entry point.
 Subcommands:
   run <task>            — Run the agent on a task.
   improve [module ...]  — Have the agent improve its own code.
+  orchestrate [module]  — Orchestrate specialist personas to improve code.
   collect <topic>       — Collect training data on a topic.
   fine-tune <data_path> — Run the fine-tuning pipeline.
   status                — Show agent history and metrics.
@@ -38,9 +39,41 @@ def cmd_improve(args: argparse.Namespace) -> None:
                 instructions=args.instructions,
                 memory=memory,
                 verbose=True,
+                use_specialists=args.specialists,
             )
     else:
-        improve_all(instructions=args.instructions, memory=memory, verbose=True)
+        improve_all(
+            instructions=args.instructions,
+            memory=memory,
+            verbose=True,
+            use_specialists=args.specialists,
+        )
+
+
+def cmd_orchestrate(args: argparse.Namespace) -> None:
+    from ghoul.memory import Memory
+    from ghoul.orchestrator import orchestrate_module
+
+    memory = Memory(session_id=args.session_id)
+
+    modules = args.modules or [
+        "agent", "executor", "evaluator", "data_collector",
+        "fine_tuner", "memory", "improver", "config",
+    ]
+
+    specialist_ids = args.specialists.split(",") if args.specialists else None
+
+    for module in modules:
+        try:
+            orchestrate_module(
+                module,
+                specialist_ids=specialist_ids,
+                extra_instructions=args.instructions,
+                memory=memory,
+                verbose=True,
+            )
+        except Exception as exc:
+            print(f"[Orchestrator] Failed on {module}: {exc}")
 
 
 def cmd_collect(args: argparse.Namespace) -> None:
@@ -54,6 +87,10 @@ def cmd_collect(args: argparse.Namespace) -> None:
         urls=urls,
         github_query=args.github_query,
         synthetic_count=args.synthetic_count,
+        max_repos=args.max_repos,
+        max_files_per_repo=args.max_files_per_repo,
+        crawl_depth=args.crawl_depth,
+        crawl_max_pages=args.crawl_max_pages,
         memory=memory,
     )
     print(f"\n[Ghoul] Training data saved to: {out_path}")
@@ -123,12 +160,39 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Specific improvement instructions to pass to Claude.",
     )
+    p_improve.add_argument(
+        "--specialists",
+        action="store_true",
+        default=False,
+        help="Also run specialist personas for additional insights.",
+    )
+
+    # orchestrate
+    p_orch = sub.add_parser(
+        "orchestrate",
+        help="Orchestrate specialist personas to improve Ghoul modules.",
+    )
+    p_orch.add_argument(
+        "modules",
+        nargs="*",
+        help="Module names to orchestrate (default: all modules).",
+    )
+    p_orch.add_argument(
+        "--specialists",
+        default=None,
+        help="Comma-separated specialist IDs to use (default: all).",
+    )
+    p_orch.add_argument(
+        "--instructions",
+        default=None,
+        help="Extra instructions for every specialist.",
+    )
 
     # collect
     p_collect = sub.add_parser("collect", help="Collect training data on a topic.")
     p_collect.add_argument("topic", help="Topic to collect data on.")
     p_collect.add_argument(
-        "--urls", nargs="*", default=[], help="URLs to scrape."
+        "--urls", nargs="*", default=[], help="Seed URLs to deep-crawl."
     )
     p_collect.add_argument(
         "--github-query", default=None, help="GitHub search query override."
@@ -136,8 +200,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument(
         "--synthetic-count",
         type=int,
-        default=10,
-        help="Number of synthetic examples to generate (default: 10).",
+        default=20,
+        help="Number of synthetic examples to generate (default: 20).",
+    )
+    p_collect.add_argument(
+        "--max-repos",
+        type=int,
+        default=100,
+        help="Maximum GitHub repos to scrape (default: 100).",
+    )
+    p_collect.add_argument(
+        "--max-files-per-repo",
+        type=int,
+        default=200,
+        help="Maximum files to download per repo (default: 200).",
+    )
+    p_collect.add_argument(
+        "--crawl-depth",
+        type=int,
+        default=2,
+        help="Link-following depth for web scraping (default: 2).",
+    )
+    p_collect.add_argument(
+        "--crawl-max-pages",
+        type=int,
+        default=100,
+        help="Maximum pages to visit per crawl (default: 100).",
     )
 
     # fine-tune
@@ -164,6 +252,7 @@ def main() -> None:
     dispatch = {
         "run": cmd_run,
         "improve": cmd_improve,
+        "orchestrate": cmd_orchestrate,
         "collect": cmd_collect,
         "fine-tune": cmd_finetune,
         "status": cmd_status,

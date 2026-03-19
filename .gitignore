@@ -18,8 +18,15 @@ env/
 # Data (runtime-generated)
 data/
 
+# Backups (runtime-generated)
+backups/
+
 # Java compiled output
 frontend/*.class
+
+# Gradle
+.gradle/
+build/
 
 # Editor
 .idea/

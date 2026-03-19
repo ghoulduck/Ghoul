@@ -11,10 +11,11 @@ import java.util.concurrent.*;
  * GhoulUI — Java Swing desktop frontend for the Ghoul AI agent.
  *
  * Provides a graphical interface for all Ghoul CLI commands:
- *   Run, Improve, Collect, Fine-Tune, and Status.
+ *   Run, Improve, Collect, Fine-Tune, Orchestrate, Status, and History.
  *
- * Invokes `python main.py` (or a configurable interpreter/script path)
- * as a subprocess and streams output live into the output panel.
+ * Invokes `python main.py` (or a bundled ghoul executable, or a configurable
+ * interpreter/script path) as a subprocess and streams output live into the
+ * output panel.
  *
  * Compile & run:
  *   javac GhoulUI.java
@@ -50,6 +51,10 @@ public class GhoulUI extends JFrame {
     private File workingDir;
     /** Python interpreter path. */
     private String pythonExe = "python";
+    /** Whether a bundled ghoul/ghoul.exe was found next to the class file. */
+    private boolean useBundledExe;
+    /** Absolute path to the bundled executable (set when useBundledExe is true). */
+    private String bundledExePath;
     /** Currently running subprocess. */
     private volatile Process activeProcess;
     /** Executor for background subprocess threads. */
@@ -74,6 +79,14 @@ public class GhoulUI extends JFrame {
     private JButton    stopButton;
     private JLabel     statusLabel;
     private JTabbedPane tabs;
+
+    // Orchestrate tab fields
+    private JTextField orchModulesField;
+    private JTextField orchSpecialistsField;
+    private JTextField orchInstructionsField;
+
+    // History tab
+    private JTextArea  historyArea;
 
     // -----------------------------------------------------------------------
     // Entry point
@@ -100,7 +113,9 @@ public class GhoulUI extends JFrame {
         setMinimumSize(new Dimension(800, 580));
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        appendOutput("Ghoul UI ready. Working directory: " + workingDir.getAbsolutePath() + "\n", FG_DIM);
+        String readyMsg = "Ghoul UI ready. Working directory: " + workingDir.getAbsolutePath();
+        if (useBundledExe) readyMsg += "  [bundled exe: " + bundledExePath + "]";
+        appendOutput(readyMsg + "\n", FG_DIM);
     }
 
     // -----------------------------------------------------------------------
@@ -109,6 +124,7 @@ public class GhoulUI extends JFrame {
 
     /**
      * Try to locate the Ghoul project root (the folder that contains main.py).
+     * Also checks for a bundled ghoul / ghoul.exe executable.
      * Falls back to the current working directory.
      */
     private File detectWorkingDir() {
@@ -121,12 +137,42 @@ public class GhoulUI extends JFrame {
             // If we're in frontend/, step up
             if (parent.getName().equals("frontend")) {
                 File up = parent.getParentFile();
-                if (new File(up, "main.py").exists()) return up;
+                if (new File(up, "main.py").exists()) {
+                    checkBundledExe(up);
+                    return up;
+                }
             }
             // Maybe main.py is right here
-            if (new File(parent, "main.py").exists()) return parent;
+            if (new File(parent, "main.py").exists()) {
+                checkBundledExe(parent);
+                return parent;
+            }
+            // No main.py found — still check for bundled exe
+            checkBundledExe(parent);
+            if (useBundledExe) return parent;
         } catch (Exception ignored) {}
-        return new File(System.getProperty("user.dir"));
+        File cwd = new File(System.getProperty("user.dir"));
+        checkBundledExe(cwd);
+        return cwd;
+    }
+
+    /**
+     * Look for a bundled ghoul or ghoul.exe executable in the given directory.
+     * If found and executable, set {@link #useBundledExe} and {@link #bundledExePath}.
+     */
+    private void checkBundledExe(File dir) {
+        if (useBundledExe) return; // already found
+        File ghoulExe = new File(dir, "ghoul.exe");
+        if (ghoulExe.exists() && ghoulExe.canExecute()) {
+            useBundledExe = true;
+            bundledExePath = ghoulExe.getAbsolutePath();
+            return;
+        }
+        File ghoul = new File(dir, "ghoul");
+        if (ghoul.exists() && ghoul.canExecute()) {
+            useBundledExe = true;
+            bundledExePath = ghoul.getAbsolutePath();
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -200,12 +246,14 @@ public class GhoulUI extends JFrame {
         tabs.setForeground(FG_TEXT);
         tabs.setFont(UI_FONT);
 
-        tabs.addTab("▶  Run",       buildRunPanel());
-        tabs.addTab("⚙  Improve",   buildImprovePanel());
-        tabs.addTab("📦 Collect",   buildCollectPanel());
-        tabs.addTab("🎛  Fine-Tune", buildFineTunePanel());
-        tabs.addTab("📊 Status",    buildStatusPanel());
-        tabs.addTab("⚙  Settings",  buildSettingsPanel());
+        tabs.addTab("▶  Run",         buildRunPanel());
+        tabs.addTab("⚙  Improve",     buildImprovePanel());
+        tabs.addTab("📦 Collect",     buildCollectPanel());
+        tabs.addTab("🎛  Fine-Tune",   buildFineTunePanel());
+        tabs.addTab("🔀 Orchestrate", buildOrchestratePanel());
+        tabs.addTab("📊 Status",      buildStatusPanel());
+        tabs.addTab("📜 History",     buildHistoryPanel());
+        tabs.addTab("⚙  Settings",    buildSettingsPanel());
 
         return tabs;
     }
@@ -221,19 +269,14 @@ public class GhoulUI extends JFrame {
 
         JButton runBtn = accentButton("▶  Run Agent");
         runBtn.addActionListener(e -> runCommand("run", buildRunArgs()));
-        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        btnRow.setBackground(BG_PANEL);
-        btnRow.add(runBtn);
-        btnRow.add(Box.createHorizontalStrut(10));
-        btnRow.add(buildStopButton());
-        p.add(btnRow);
+        p.add(btnRow(runBtn));
 
         padBottom(p);
         return p;
     }
 
     private String[] buildRunArgs() {
-        String task = taskField.getText().trim();
+        String task = getFieldValue(taskField);
         if (task.isEmpty()) { showError("Please enter a task."); return null; }
         return new String[]{ task };
     }
@@ -261,8 +304,8 @@ public class GhoulUI extends JFrame {
     }
 
     private String[] buildImproveArgs() {
-        String modules = moduleField.getText().trim();
-        String instructions = instructionsField.getText().trim();
+        String modules = getFieldValue(moduleField);
+        String instructions = getFieldValue(instructionsField);
         java.util.List<String> args = new java.util.ArrayList<>();
         if (!modules.isEmpty()) {
             for (String m : modules.split("\\s+")) args.add(m);
@@ -306,16 +349,16 @@ public class GhoulUI extends JFrame {
     }
 
     private String[] buildCollectArgs() {
-        String topic = topicField.getText().trim();
+        String topic = getFieldValue(topicField);
         if (topic.isEmpty()) { showError("Please enter a topic."); return null; }
         java.util.List<String> args = new java.util.ArrayList<>();
         args.add(topic);
-        String urls = urlsField.getText().trim();
+        String urls = getFieldValue(urlsField);
         if (!urls.isEmpty()) {
             args.add("--urls");
             for (String u : urls.split("\\s+")) args.add(u);
         }
-        String ghQ = githubQueryField.getText().trim();
+        String ghQ = getFieldValue(githubQueryField);
         if (!ghQ.isEmpty()) {
             args.add("--github-query");
             args.add(ghQ);
@@ -363,10 +406,54 @@ public class GhoulUI extends JFrame {
     }
 
     private String[] buildFineTuneArgs() {
-        String path = dataPathField.getText().trim();
+        String path = getFieldValue(dataPathField);
         if (path.isEmpty()) { showError("Please specify a data file path."); return null; }
         String target = (String) ftTargetCombo.getSelectedItem();
         return new String[]{ path, "--target", target };
+    }
+
+    // Orchestrate tab
+    private JPanel buildOrchestratePanel() {
+        JPanel p = tabPanel("Orchestrate multi-module agent workflows");
+
+        orchModulesField = styledField("Space-separated module names (blank = all)", 30);
+        orchModulesField.setToolTipText("Module names to orchestrate, e.g.: executor evaluator. Leave blank for all.");
+        addFormRow(p, "Modules:", orchModulesField, false);
+
+        orchSpecialistsField = styledField("Comma-separated specialist IDs (blank = all)", 30);
+        orchSpecialistsField.setToolTipText("Specialist IDs to use, e.g.: spec1,spec2. Leave blank for all.");
+        addFormRow(p, "Specialists:", orchSpecialistsField, false);
+
+        orchInstructionsField = styledField("Extra instructions for orchestration", 30);
+        addFormRow(p, "Instructions:", orchInstructionsField, false);
+
+        p.add(Box.createVerticalStrut(16));
+
+        JButton orchBtn = accentButton("🔀 Orchestrate");
+        orchBtn.addActionListener(e -> runCommand("orchestrate", buildOrchestrateArgs()));
+        p.add(btnRow(orchBtn));
+
+        padBottom(p);
+        return p;
+    }
+
+    private String[] buildOrchestrateArgs() {
+        java.util.List<String> args = new java.util.ArrayList<>();
+        String modules = getFieldValue(orchModulesField);
+        if (!modules.isEmpty()) {
+            for (String m : modules.split("\\s+")) args.add(m);
+        }
+        String specialists = getFieldValue(orchSpecialistsField);
+        if (!specialists.isEmpty()) {
+            args.add("--specialists");
+            args.add(specialists);
+        }
+        String instr = getFieldValue(orchInstructionsField);
+        if (!instr.isEmpty()) {
+            args.add("--instructions");
+            args.add(instr);
+        }
+        return args.toArray(new String[0]);
     }
 
     // Status tab
@@ -378,6 +465,83 @@ public class GhoulUI extends JFrame {
         p.add(btnRow(statusBtn));
         padBottom(p);
         return p;
+    }
+
+    // History tab
+    private JPanel buildHistoryPanel() {
+        JPanel p = new JPanel(new BorderLayout(0, 10));
+        p.setBackground(BG_PANEL);
+        p.setBorder(new EmptyBorder(18, 18, 18, 18));
+
+        // Top section: description + refresh button
+        JPanel top = new JPanel();
+        top.setBackground(BG_PANEL);
+        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
+
+        JLabel desc = new JLabel("View detailed session history");
+        desc.setForeground(FG_DIM);
+        desc.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 12));
+        desc.setAlignmentX(Component.LEFT_ALIGNMENT);
+        top.add(desc);
+        top.add(Box.createVerticalStrut(14));
+
+        JButton refreshBtn = accentButton("🔄 Refresh");
+        refreshBtn.addActionListener(e -> refreshHistory());
+        JPanel refreshRow = btnRow(refreshBtn);
+        top.add(refreshRow);
+
+        p.add(top, BorderLayout.NORTH);
+
+        // Scrollable text area for history output
+        historyArea = new JTextArea();
+        historyArea.setEditable(false);
+        historyArea.setBackground(BG_DARK);
+        historyArea.setForeground(FG_TEXT);
+        historyArea.setFont(MONO_FONT);
+        historyArea.setBorder(new EmptyBorder(8, 8, 8, 8));
+        historyArea.setLineWrap(true);
+        historyArea.setWrapStyleWord(true);
+
+        JScrollPane scroll = new JScrollPane(historyArea);
+        scroll.setBorder(BorderFactory.createLineBorder(BG_INPUT, 1));
+        scroll.getViewport().setBackground(BG_DARK);
+
+        p.add(scroll, BorderLayout.CENTER);
+        return p;
+    }
+
+    /** Run `status` in the background and display output in the History text area. */
+    private void refreshHistory() {
+        historyArea.setText("Loading…\n");
+
+        java.util.List<String> cmd = buildBaseCommand();
+        cmd.add("status");
+
+        executor.submit(() -> {
+            try {
+                ProcessBuilder pb = new ProcessBuilder(cmd);
+                pb.directory(workingDir);
+                pb.redirectErrorStream(true);
+                Process proc = pb.start();
+
+                StringBuilder sb = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(proc.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
+                }
+                proc.waitFor();
+                SwingUtilities.invokeLater(() -> {
+                    historyArea.setText(sb.toString());
+                    historyArea.setCaretPosition(0);
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() ->
+                    historyArea.setText("Error: " + ex.getMessage() + "\n"));
+            }
+        });
     }
 
     // Settings tab
@@ -480,6 +644,23 @@ public class GhoulUI extends JFrame {
     // -----------------------------------------------------------------------
 
     /**
+     * Build the base command prefix: either the bundled executable or
+     * python + main.py.
+     */
+    private java.util.List<String> buildBaseCommand() {
+        java.util.List<String> cmd = new java.util.ArrayList<>();
+        if (useBundledExe && bundledExePath != null) {
+            cmd.add(bundledExePath);
+        } else {
+            pythonExe = pythonPathField.getText().trim();
+            if (pythonExe.isEmpty()) pythonExe = "python";
+            cmd.add(pythonExe);
+            cmd.add("main.py");
+        }
+        return cmd;
+    }
+
+    /**
      * Build the full command array and run it in a background thread.
      *
      * @param subcommand  The Ghoul subcommand (e.g. "run", "improve").
@@ -488,15 +669,9 @@ public class GhoulUI extends JFrame {
     private void runCommand(String subcommand, String[] extraArgs) {
         if (extraArgs == null) return;  // validation already showed an error dialog
 
-        pythonExe = pythonPathField.getText().trim();
-        if (pythonExe.isEmpty()) pythonExe = "python";
+        java.util.List<String> cmd = buildBaseCommand();
 
-        // Build: python main.py [--session-id SID] <subcommand> [extraArgs...]
-        java.util.List<String> cmd = new java.util.ArrayList<>();
-        cmd.add(pythonExe);
-        cmd.add("main.py");
-
-        String sid = sessionIdField.getText().trim();
+        String sid = getFieldValue(sessionIdField);
         if (!sid.isEmpty()) {
             cmd.add("--session-id");
             cmd.add(sid);
@@ -588,7 +763,7 @@ public class GhoulUI extends JFrame {
     // Widget factories
     // -----------------------------------------------------------------------
 
-    /** Styled single-line text field. */
+    /** Styled single-line text field with placeholder behaviour. */
     private JTextField styledField(String placeholder, int cols) {
         JTextField f = new JTextField(cols);
         f.setBackground(BG_INPUT);
@@ -600,8 +775,9 @@ public class GhoulUI extends JFrame {
             new EmptyBorder(4, 8, 4, 8)
         ));
         f.setToolTipText(placeholder);
+        // Store placeholder so getFieldValue can distinguish it from real input
+        f.putClientProperty("placeholder", placeholder);
         // Show placeholder text
-        f.setText("");
         f.addFocusListener(new FocusAdapter() {
             @Override public void focusGained(FocusEvent e) {
                 if (f.getText().equals(placeholder)) { f.setText(""); f.setForeground(FG_TEXT); }
@@ -616,9 +792,20 @@ public class GhoulUI extends JFrame {
     }
 
     /**
-     * Get the actual value from a styled field (ignoring placeholder text).
-     * We rely on each field's actual getText(); callers trim and check emptiness.
+     * Return the real user-entered value from a styled field, or empty string
+     * if the field still shows its placeholder text.
      */
+    private String getFieldValue(JTextField field, String placeholder) {
+        String text = field.getText().trim();
+        if (text.equals(placeholder) && field.getForeground().equals(FG_DIM)) return "";
+        return text;
+    }
+
+    /** Convenience overload that reads the placeholder from the field's client property. */
+    private String getFieldValue(JTextField field) {
+        String placeholder = (String) field.getClientProperty("placeholder");
+        return getFieldValue(field, placeholder != null ? placeholder : "");
+    }
 
     private JButton accentButton(String label) {
         JButton btn = new JButton(label);
@@ -633,17 +820,6 @@ public class GhoulUI extends JFrame {
             @Override public void mouseExited(MouseEvent e)  { btn.setBackground(ACCENT); }
         });
         return btn;
-    }
-
-    private JButton buildStopButton() {
-        stopButton = new JButton("■ Stop");
-        stopButton.setBackground(ERROR_COL);
-        stopButton.setForeground(Color.WHITE);
-        stopButton.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-        stopButton.setBorder(new EmptyBorder(8, 14, 8, 14));
-        stopButton.setEnabled(false);
-        stopButton.addActionListener(e -> stopActiveProcess());
-        return stopButton;
     }
 
     private JLabel dim(String text) {
